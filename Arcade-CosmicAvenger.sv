@@ -281,10 +281,19 @@ wire [1:0] r,g,b;
 
 wire HBlank, VBlank;
 
+reg ce_pix;
+always @(posedge clk_sys) begin
+        reg old_clk;
+
+        old_clk <= ce_vid;
+        ce_pix <= old_clk & ~ce_vid;
+end
+
+
 arcade_fx #(240,6) arcade_video
 (
         .*,
-		  .ce_pix(ce_vid),
+	//.ce_pix(ce_vid),
         .clk_video(clk_sys),
 
         .RGB_in({r,g,b}),
