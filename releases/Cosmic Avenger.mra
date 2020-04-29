@@ -1,21 +1,22 @@
 <misterromdescription>
 	<name>Cosmic Avenger</name>
-	<mameversion>0216</mameversion>
-	<mratimestamp>201911270000</mratimestamp>
+	<mameversion>0220</mameversion>
+	<setname>cavenger</setname>
+	<mratimestamp>20200427161917</mratimestamp>
 	<year>1981</year>
 	<manufacturer>Universal</manufacturer>
 	<category>Space / Defender</category>
 	<rbf>cosmicavenger</rbf>
-	<rom index="0" zip="cavenger.zip" md5="f1233ff57be1767247bdd18c7b0bdf69" type="merged|nonmerged">
-		<part name="1.c4"/>
-		<part name="2.d4"/>
-		<part name="3.e4"/>
-		<part name="4.h4"/>
-		<part name="5.j4"/>
-		<part name="6.k4"/>
-		<part name="8.l7"/>
-		<part name="8.l7"/>
-		<part name="9.f7"/>
-		<part name="0.h7"/>
+	<rom index="0" zip="cavenger.zip" md5="f1233ff57be1767247bdd18c7b0bdf69">
+		<part crc="9e0cc781" name="1.c4"/>
+		<part crc="5ce5b950" name="2.d4"/>
+		<part crc="bc28218d" name="3.e4"/>
+		<part crc="2b32e9f5" name="4.h4"/>
+		<part crc="d117153e" name="5.j4"/>
+		<part crc="c7d366cb" name="6.k4"/>
+		<part crc="b022bf2d" name="8.l7"/>
+		<part crc="b022bf2d" name="8.l7"/>
+		<part crc="63357785" name="9.f7"/>
+		<part crc="52ad1133" name="0.h7"/>
 	</rom>
 </misterromdescription>
