@@ -19,6 +19,7 @@
 //  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //============================================================================
 
+
 module emu
 (
 	//Master input clock
@@ -29,7 +30,7 @@ module emu
 	input         RESET,
 
 	//Must be passed to hps_io module
-	inout  [44:0] HPS_BUS,
+	inout  [45:0] HPS_BUS,
 
 	//Base video clock. Usually equals to CLK_SYS.
 	output        VGA_CLK,
@@ -44,6 +45,7 @@ module emu
 	output        VGA_HS,
 	output        VGA_VS,
 	output        VGA_DE,    // = ~(VBlank | HBlank)
+	output        VGA_F1,
 
 	//Base video clock. Usually equals to CLK_SYS.
 	output        HDMI_CLK,
@@ -74,9 +76,21 @@ module emu
 
 	output [15:0] AUDIO_L,
 	output [15:0] AUDIO_R,
-	output        AUDIO_S    // 1 - signed audio samples, 0 - unsigned
+	output        AUDIO_S,   // 1 - signed audio samples, 0 - unsigned
+	
+	// Open-drain User port.
+	// 0 - D+/RX
+	// 1 - D-/TX
+	// 2..6 - USR2..USR6
+	// Set USER_OUT to 1 to read from USER_IN.
+	input   [6:0] USER_IN,
+	output  [6:0] USER_OUT
+	
+	
 );
 
+assign VGA_F1    = 0;
+assign USER_OUT  = '1;
 assign LED_USER  = ioctl_download;
 assign LED_DISK  = 0;
 assign LED_POWER = 0;
@@ -87,15 +101,48 @@ assign HDMI_ARY = status[1] ? 8'd9  : 8'd3;
 `include "build_id.v" 
 localparam CONF_STR = {
 	"A.CSMVNG;;",
-	"-;",
 	"O1,Aspect Ratio,Original,Wide;",
-	"O34,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
+	"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
+	"O89,Difficulty,Easy,Medium,Hard,Hardest;",
+	"ODE,Lives,3,4,5,2;",
+	"OC,Cabinet,Upright,Cocktail;",	
 	"-;",
-	"T6,Reset;",
-	"J,Fire,Bomb,Start 1P,Start 2P;",
-	"V,v2.00.",`BUILD_DATE
+	"R0,Reset;",
+	"J1,Fire,Bomb,Start 1P,Start 2P,Coin;",
+	"jn,A,B,Start,Select,R;",
+	"jp,B,A,Start,Select,R;",
+	"V,v",`BUILD_DATE
 };
+/*
+   -- Lives per Game ---------------------------------------------------------
+    -- 00 = 2 Lives
+    -- 11 = 3 Lives
+    -- 10 = 4 Lives
+    -- 01 = 5 Lives
+    "01" &
+    -- Initial High Score -----------------------------------------------------
+    -- 00 = 0
+    -- 11 = 5000
+    -- 10 = 8000
+    -- 01 = 10000
+    "11" &
+    -- Cabinet ----------------------------------------------------------------
+    -- 0 = Upright
+    -- 1 = Cocktail
+    '0' &
+    -- High Score Names -------------------------------------------------------
+    -- 0 = 3 Letters
+    -- 1 = 10 Letters
+    '1' &
+    -- Difficulty -------------------------------------------------------------
+    -- 11 = Easy
+    -- 10 = Medium
+    -- 01 = Hard
+    -- 00 = Hardest
+    "10";
+*/
+wire [7:0] m_dip = {~status[14:13],1'b1,1'b1,status[12],1'b0,~status[9:8]};
 
 ////////////////////   CLOCKS   ///////////////////
 
@@ -115,6 +162,7 @@ pll pll
 
 wire [31:0] status;
 wire  [1:0] buttons;
+wire        forced_scandoubler;
 
 wire        ioctl_download;
 wire        ioctl_wr;
@@ -126,7 +174,9 @@ wire [10:0] ps2_key;
 wire [15:0] joystick_0,joystick_1;
 wire [15:0] joy = joystick_0 | joystick_1;
 
-wire        forced_scandoubler;
+
+wire [21:0] gamma_bus;
+
 
 hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 (
@@ -138,6 +188,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 	.buttons(buttons),
 	.status(status),
 	.forced_scandoubler(forced_scandoubler),
+	.gamma_bus(gamma_bus),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_wr(ioctl_wr),
@@ -166,6 +217,18 @@ always @(posedge clk_sys) begin
 
 			'h005: btn_one_player  <= pressed; // F1
 			'h006: btn_two_players <= pressed; // F2
+			// JPAC/IPAC/MAME Style Codes
+			'h016: btn_start_1     <= pressed; // 1
+			'h01E: btn_start_2     <= pressed; // 2
+			'h02E: btn_coin_1      <= pressed; // 5
+			'h036: btn_coin_2      <= pressed; // 6
+			'h02D: btn_up_2        <= pressed; // R
+			'h02B: btn_down_2      <= pressed; // F
+			'h023: btn_left_2      <= pressed; // D
+			'h034: btn_right_2     <= pressed; // G
+			'h01C: btn_fire_2      <= pressed; // A
+			'h01B: btn_bomb_2      <= pressed; // S
+			'h02C: btn_test        <= pressed; // T
 		endcase
 	end
 end
@@ -179,6 +242,20 @@ reg btn_bomb  = 0;
 reg btn_one_player  = 0;
 reg btn_two_players = 0;
 
+reg btn_start_1=0;
+reg btn_start_2=0;
+reg btn_coin_1=0;
+reg btn_coin_2=0;
+reg btn_up_2=0;
+reg btn_down_2=0;
+reg btn_left_2=0;
+reg btn_right_2=0;
+reg btn_fire_2=0;
+reg btn_bomb_2=0;
+reg btn_test=0;
+
+
+
 wire m_up     = btn_up    | joy[3];
 wire m_down   = btn_down  | joy[2];
 wire m_left   = btn_left  | joy[1];
@@ -186,48 +263,45 @@ wire m_right  = btn_right | joy[0];
 wire m_fire   = btn_fire  | joy[4];
 wire m_bomb   = btn_bomb  | joy[5];
 
-wire m_start1 = btn_one_player  | joy[6];
-wire m_start2 = btn_two_players | joy[7];
-wire m_coin   = m_start1 | m_start2;
+wire m_up_2     = btn_up_2    | joy[3];
+wire m_down_2   = btn_down_2  | joy[2];
+wire m_left_2   = btn_left_2  | joy[1];
+wire m_right_2  = btn_right_2 | joy[0];
+wire m_fire_2  = btn_fire_2 |joy[4];
+wire m_bomb_2  = btn_bomb_2 |joy[5];
+
+
+wire m_start1 = btn_one_player  | joystick_0[6];
+wire m_start2 = btn_two_players | joy[7] | joystick_1[6];
+wire m_coin   = btn_coin_1 | btn_coin_2 | joy[8];
 
 wire ce_vid;
 wire hs, vs;
 wire [1:0] r,g,b;
 
-assign VGA_CLK  = clk_40;
-assign HDMI_CLK = VGA_CLK;
-assign HDMI_CE  = VGA_CE;
-assign HDMI_R   = VGA_R;
-assign HDMI_G   = VGA_G;
-assign HDMI_B   = VGA_B;
-assign HDMI_DE  = VGA_DE;
-assign HDMI_HS  = VGA_HS;
-assign HDMI_VS  = VGA_VS;
-assign HDMI_SL  = 0;
-
-wire HSync = ~hs;
-wire VSync = ~vs;
 wire HBlank, VBlank;
 
-wire [1:0] scale = status[4:3];
+reg ce_pix;
+always @(posedge clk_sys) begin
+        reg old_clk;
 
-video_mixer #(.HALF_DEPTH(1)) video_mixer
+        old_clk <= ce_vid;
+        ce_pix <= old_clk & ~ce_vid;
+end
+
+
+arcade_fx #(240,6) arcade_video
 (
-	.*,
-	.clk_sys(VGA_CLK),
-	.ce_pix(ce_vid),
-	.ce_pix_out(VGA_CE),
-	
-	.scanlines({scale == 3, scale == 2}),
-	.scandoubler(scale || forced_scandoubler),
-	.hq2x(scale==1),
-	.mono(0),
+        .*,
+	//.ce_pix(ce_vid),
+        .clk_video(clk_sys),
 
-	.R({2{r}}),
-	.G({2{g}}),
-	.B({2{b}})
+        .RGB_in({r,g,b}),
+        .HSync(~hs),
+        .VSync(~vs),
+
+        .fx(status[5:3])
 );
-
 
 wire [7:0] audio;
 assign AUDIO_L = {audio, 8'd0};
@@ -237,7 +311,7 @@ assign AUDIO_S = 1;
 ladybug cavenger
 (
 	.CLK_IN(clk_sys),
-	.I_RESET(RESET | status[0] | status[6] | buttons[1]),
+	.I_RESET(RESET | status[0] | ioctl_download | buttons[1]),
 	.O_PIXCE(ce_vid),
 
 	.O_VIDEO_R(r),
@@ -254,15 +328,18 @@ ladybug cavenger
 
 	.O_AUDIO(audio),
 	
-	.but_coin_s(~{1'b0,m_coin}),
-	.but_fire_s(~{1'b0,m_fire}),
-	.but_bomb_s(~{1'b0,m_bomb}),
+
+	.but_coin_s(~{1'b0,m_coin|btn_coin_1|btn_coin_2}),
+	.but_fire_s(~{m_fire_2,m_fire}),
+	.but_bomb_s(~{m_bomb_2,m_bomb}),
 	.but_tilt_s(~{1'b0,1'b0}),
-	.but_select_s(~{m_start2,m_start1}),
-	.but_up_s(~{1'b0,m_up}),
-	.but_down_s(~{1'b0,m_down}),
-	.but_left_s(~{1'b0,m_left}),
-	.but_right_s(~{1'b0,m_right})
-);
+	.but_select_s(~{m_start2|btn_start_2,m_start1|btn_start_1}),
+	.but_up_s(~{m_up_2,m_up}),
+	.but_down_s(~{m_down_2,m_down}),
+	.but_left_s(~{m_left_2,m_left}),
+	.but_right_s(~{m_right_2,m_right}),
+	.dip_block_1_s(m_dip)
+
+	);
 
 endmodule
